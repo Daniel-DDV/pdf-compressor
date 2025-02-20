@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dynamic PDF Compressor</title>
+  <!-- Voor productie: installeer Tailwind CSS als PostCSS plugin of gebruik de CLI -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .dropzone {
+      border: 2px dashed #cbd5e0; /* Tailwind gray-300 */
+      border-radius: 0.5rem;
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: background-color 0.2s, border-color 0.2s;
+    }
+    .dropzone.dragover {
+      background-color: #ebf8ff; /* Tailwind blue-50 */
+      border-color: #4299e1; /* Tailwind blue-500 */
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div class="min-h-screen flex flex-col items-center justify-center p-6">
+    <h1 class="text-4xl font-bold mb-4">PDF Compressor</h1>
+    <p class="text-gray-700 mb-6 text-center">
+      Upload je PDF en wij passen automatisch de beste compressiemethode toe om het bestand rond 8 MB te krijgen.
+    </p>
+    
+    <!-- Dropzone -->
+    <div id="dropZone" class="w-full max-w-md dropzone">
+      Sleep je PDF hierheen of klik om te selecteren
+    </div>
+    <!-- Verborgen file input -->
+    <input type="file" id="fileInput" name="file" accept=".pdf" class="hidden">
+    
+    <!-- Spinner en melding tijdens verwerking -->
+    <div id="progressSection" class="hidden mt-6 flex flex-col items-center">
+      <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-blue-600"></div>
+      <p class="mt-4 text-gray-700">PDF wordt verwerkt, dit kan enkele minuten duren...</p>
+    </div>
+    
+    <!-- Resultaat sectie -->
+    <div id="resultSection" class="hidden mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+      <h2 class="text-xl font-semibold text-green-800 mb-2">Bestand verwerkt!</h2>
+      <p id="resultDetails" class="text-green-700"></p>
+      <div class="mt-4">
+        <a id="downloadButton" href="#" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors">Download PDF</a>
+      </div>
+      <p id="methodInfo" class="text-sm text-gray-600 mt-2"></p>
+    </div>
+    
+    <!-- Foutmelding sectie -->
+    <div id="errorSection" class="hidden mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+      <h2 class="text-xl font-semibold text-red-800 mb-2">Er is een fout opgetreden</h2>
+      <p id="errorText" class="text-red-700"></p>
+    </div>
+  </div>
+  
+  <script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const progressSection = document.getElementById('progressSection');
+    const resultSection = document.getElementById('resultSection');
+    const resultDetails = document.getElementById('resultDetails');
+    const downloadButton = document.getElementById('downloadButton');
+    const methodInfo = document.getElementById('methodInfo');
+    const errorSection = document.getElementById('errorSection');
+    const errorText = document.getElementById('errorText');
+    
+    // Voorkom standaard gedrag bij drag events
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, e => {
+        e.preventDefault();
+        e.stopPropagation();
+      }, false);
+    });
+    
+    // Visuele feedback tijdens dragover
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+    });
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+    });
+    
+    // Afhandeling van drop
+    dropZone.addEventListener('drop', handleDrop, false);
+    // Klik op de dropzone activeert de file input
+    dropZone.addEventListener('click', () => fileInput.click());
+    // Afhandeling van file selectie via file input
+    fileInput.addEventListener('change', handleFileSelect);
+    
+    function handleDrop(e) {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      if (files.length) {
+        handleFiles(files);
+      }
+    }
+    
+    function handleFileSelect(e) {
+      const files = e.target.files;
+      handleFiles(files);
+      // Reset de file input zodat dezelfde file later opnieuw kan worden geselecteerd
+      fileInput.value = "";
+    }
+    
+    function handleFiles(files) {
+      if (files.length === 0) return;
+      const file = files[0];
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        showError("Alleen PDF-bestanden worden ondersteund.");
+        return;
+      }
+      uploadFile(file);
+    }
+    
+    async function uploadFile(file) {
+      hideError();
+      showProgress();
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const response = await fetch("/upload/", {
+          method: "POST",
+          body: formData
+        });
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || "Er is een fout opgetreden tijdens uploaden.");
+        }
+        const result = await response.json();
+        showResult(result);
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        hideProgress();
+      }
+    }
+    
+    function showProgress() {
+      progressSection.classList.remove("hidden");
+      resultSection.classList.add("hidden");
+      errorSection.classList.add("hidden");
+    }
+    
+    function hideProgress() {
+      progressSection.classList.add("hidden");
+    }
+    
+    function showResult(result) {
+      resultSection.classList.remove("hidden");
+      resultDetails.innerHTML = `
+        Originele grootte: ${(result.original_size / (1024*1024)).toFixed(2)} MB<br>
+        Nieuwe grootte: ${(result.compressed_size / (1024*1024)).toFixed(2)} MB<br>
+        Reductie: ${result.reduction_percentage.toFixed(1)}%`;
+      downloadButton.href = result.download_path;
+      methodInfo.textContent = "Gebruikte methode: " + result.method;
+    }
+    
+    function showError(message) {
+      errorSection.classList.remove("hidden");
+      errorText.textContent = message;
+      resultSection.classList.add("hidden");
+    }
+    
+    // Toegevoegde functie hideError
+    function hideError() {
+      errorSection.classList.add("hidden");
+    }
+  </script>
+</body>
+</html>
