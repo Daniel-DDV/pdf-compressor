@@ -1,4 +1,3 @@
-```markdown
 # Dynamic PDF Compressor
 
 Dynamic PDF Compressor is een FastAPI-gebaseerde applicatie die PDF-bestanden dynamisch comprimeert met behulp van Ghostscript. De applicatie analyseert de inhoud van een PDF (tekst versus afbeeldingen) en kiest automatisch de beste compressiemethode om het bestand rond 8 MB te krijgen.
@@ -120,7 +119,4 @@ Feedback, issues en pull requests zijn welkom! Open een issue of doe een pull re
 
 ## License
 
-Dit project is gelicentieerd onder de MIT License.
-```
-
----
+Dit project is gelicentieerd onder de MIT License
