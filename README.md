@@ -124,11 +124,3 @@ Dit project is gelicentieerd onder de MIT License.
 ```
 
 ---
-
-### Samenvatting
-
-- De **Dockerfile** zorgt ervoor dat je applicatie makkelijk in een container draait, ongeacht of je op Linux of Windows werkt.
-- De aangepaste **README.md** bevat nu duidelijke installatie-instructies voor zowel Docker-gebruik als voor een lokale installatie.
-- Met deze setup kun je je project gemakkelijk naar GitHub pushen en later deployen op een productieomgeving.
-
-Zodra je deze bestanden hebt toegevoegd en gecommit, kun je je wijzigingen naar GitHub pushen vanuit de WSL-terminal of vanuit VS Code. Mocht je nog vragen hebben of verdere aanpassingen willen, laat het gerust weten!
