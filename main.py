@@ -35,7 +35,7 @@ for p in [UPLOAD_DIR, PROCESSED_DIR, LOG_DIR]:
 
 # Logging instellen
 logging.basicConfig(
-    level=logging.INFO,
+    level="INFO",
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler(LOG_DIR / f"app_{datetime.now().strftime('%Y%m%d')}.log"),
@@ -46,7 +46,8 @@ logging.basicConfig(
 # Serveer statische bestanden (voor index.html, etc.)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-TARGET_SIZE = 8 * 1024 * 1024  # 8 MB
+# Pas het target aan naar 25 MB
+TARGET_SIZE = 25 * 1024 * 1024  # 25 MB
 
 def analyze_pdf(input_pdf: Path) -> dict:
     """
@@ -70,7 +71,6 @@ def run_ghostscript(input_pdf: Path, output_pdf: Path, quality: str, extra_param
     """
     Roep Ghostscript aan met een basiscommandoregel plus eventuele extra parameters.
     quality kan bijvoorbeeld zijn: "/ebook" of "/screen".
-    extra_params is een lijst met aanvullende parameters (bv. downsample-opties).
     """
     command = [
         "gs",
@@ -90,10 +90,10 @@ def run_ghostscript(input_pdf: Path, output_pdf: Path, quality: str, extra_param
     logging.info(f"Running Ghostscript: {' '.join(command)}")
     subprocess.run(command, check=True)
 
-def standard_optimization(input_pdf: Path, output_pdf: Path) -> int:
+def standard_optimization(input_pdf: Path, output_pdf: Path) -> (int, Path):
     """
     Probeer eerst een standaard optimalisatie (via Ghostscript met /ebook en downsampling).
-    Retourneer de bestandsgrootte.
+    Retourneer de bestandsgrootte en de tijdelijke output.
     """
     temp_out = output_pdf.with_suffix(".std.pdf")
     extra = [
@@ -109,10 +109,10 @@ def standard_optimization(input_pdf: Path, output_pdf: Path) -> int:
     logging.info(f"Standaard optimalisatie resultaat: {size} bytes")
     return size, temp_out
 
-def aggressive_optimization(input_pdf: Path, output_pdf: Path) -> int:
+def aggressive_optimization(input_pdf: Path, output_pdf: Path) -> (int, Path):
     """
     Gebruik een agressievere Ghostscript-instelling (bijv. /screen).
-    Retourneer de bestandsgrootte.
+    Retourneer de bestandsgrootte en de tijdelijke output.
     """
     temp_out = output_pdf.with_suffix(".agg.pdf")
     extra = [
@@ -134,8 +134,8 @@ def dynamic_compress(input_pdf: Path, output_pdf: Path) -> dict:
       1. Als het bestand al ≤ target is, kopieer dan direct.
       2. Analyseer de PDF.
       3. Kies een methode:
-         - Als de PDF veel tekst bevat (en weinig afbeeldingen), gebruik dan de standaard optimalisatie.
-         - Anders, gebruik de agressieve optimalisatie.
+         - Als de PDF veel tekst bevat (en weinig afbeeldingen), gebruik dan standaard optimalisatie.
+         - Anders, gebruik agressieve optimalisatie.
       4. Vergelijk beide methoden en kies de kleinste.
     """
     original_size = input_pdf.stat().st_size
@@ -155,8 +155,6 @@ def dynamic_compress(input_pdf: Path, output_pdf: Path) -> dict:
     logging.info(f"PDF-analyse: {stats}")
 
     # Beslis welke methode:
-    # Stel: als de gemiddelde tekst per pagina meer dan 500 karakters is en minder dan 0.2 images per pagina,
-    # dan is het waarschijnlijk text-heavy en kan standaard optimalisatie volstaan.
     if avg_text > 500 and image_ratio < 0.2:
         logging.info("Kies standaard optimalisatie (text-heavy document).")
         std_size, std_file = standard_optimization(input_pdf, output_pdf)
@@ -170,10 +168,9 @@ def dynamic_compress(input_pdf: Path, output_pdf: Path) -> dict:
         best_size = agg_size
         best_file = agg_file
 
-    # Als de gekozen methode niet binnen target komt, probeer dan beide en kies de kleinste.
+    # Probeer beide methoden en kies de kleinste
     std_size, std_file = standard_optimization(input_pdf, output_pdf.with_suffix(".std.pdf"))
     agg_size, agg_file = aggressive_optimization(input_pdf, output_pdf.with_suffix(".agg.pdf"))
-
     if std_size <= agg_size:
         best_size = std_size
         best_method = "standaard"
@@ -186,7 +183,6 @@ def dynamic_compress(input_pdf: Path, output_pdf: Path) -> dict:
         best_file = agg_file
         if std_file.exists():
             os.remove(str(std_file))
-    # Verplaats het beste resultaat naar output_pdf
     shutil.move(str(best_file), str(output_pdf))
     reduction = ((original_size - best_size) / original_size) * 100
 
